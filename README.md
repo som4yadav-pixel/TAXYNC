@@ -15,17 +15,7 @@ Taxync is a modern, intuitive web application designed to help Indian taxpayers 
 - **'What If?' Simulation**: Project future tax liabilities based on an expected salary hike and changes in investments.
 - **Responsive Design**: A clean, mobile-friendly UI built with Tailwind CSS and Framer Motion.
 
-## 📸 Screenshots
 
-*A brief showcase of the Taxync dashboard and its features.*
-
-| Dashboard View                                   | Smart Insights Panel                               |
-| :----------------------------------------------: | :------------------------------------------------: |
-| *[Insert Dashboard Screenshot Here]*              | *[Insert Smart Insights Screenshot Here]*           |
-
-| Reports & Export                                 | Mobile Responsiveness                              |
-| :----------------------------------------------: | :------------------------------------------------: |
-| *[Insert Reports Page Screenshot Here]*          | *[Insert Mobile View Screenshot Here]*              |
 
 ## 🛠️ Tech Stack
 
