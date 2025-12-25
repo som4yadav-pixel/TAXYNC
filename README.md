@@ -50,69 +50,47 @@ Follow these instructions to set up and run the project locally.
 
 - Node.js (v18 or newer)
 - Python (v3.9 or newer)
-- `pip` and `virtualenv`
 
-### Installation & Setup
+### How to Run This Project
 
-1.  **Clone the repository:**
+1.  **Clone the Repository**
+    Open your terminal, navigate to the directory where you want to store the project, and run:
     ```bash
-    git clone <repository-url>
-    cd taxync
+    git clone https://github.com/som4yadav-pixel/TAXYNC.git
+    cd TAXYNC
     ```
 
-2.  **Setup the Backend:**
+2.  **Install All Dependencies**
+    Run the following commands to set up a virtual environment and install both backend and frontend dependencies:
     ```bash
-    # Navigate to the project directory
-    cd project
+    # Create and activate a Python virtual environment
+    py -m venv venv
+    .\venv\Scripts\activate
 
-    # Create and activate a virtual environment
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    # Install Python packages
+    py -m pip install -r requirements.txt
 
-    # Install Python dependencies
-    pip install -r requirements.txt
+    # Install Node.js packages (use this if you encounter PowerShell errors)
+    powershell -ExecutionPolicy Bypass -Command "npm install"
     ```
 
-3.  **Setup the Frontend:**
-    ```bash
-    # From the project directory
-    npm install
-    ```
+3.  **Run the Application**
+    You'll need two separate terminals for this step.
 
-4.  **Configure Environment Variables:**
+    *   **In your first terminal, start the backend server:**
+        ```bash
+        py -m uvicorn main:app --host 0.0.0.0 --port 8001
+        ```
 
-    The AI Smart Insights feature requires an OpenAI API key.
+    *   **Open a new terminal and start the frontend server:**
+        ```bash
+        powershell -ExecutionPolicy Bypass -Command "npm run dev"
+        ```
 
-    - Create a `.env` file in the `project` directory by copying the example:
-      ```bash
-      cp .env.example .env
-      ```
-    - Open the `.env` file and add your OpenAI API key:
-      ```
-      OPENAI_API_KEY="your_openai_api_key_here"
-      ```
-
-### Running the Application
-
-1.  **Start the Backend Server:**
-
-    Make sure you are in the `project` directory with your virtual environment activated.
-    ```bash
-    uvicorn main:app --reload
-    ```
-    The backend will be running at `http://127.0.0.1:8000`.
-
-2.  **Start the Frontend Development Server:**
-
-    In a new terminal, navigate to the `project` directory.
-    ```bash
-    npm run dev
-    ```
-    The frontend will be available at `http://localhost:5173`.
-
-3.  **Open the App:**
-
-    Open your browser and navigate to `http://localhost:5173` to use the application.
+4.  **Access the Application**
+    Once both servers are running, open your web browser and go to the following address to use the tax calculator:
+    
+    **`http://localhost:5173`**
 
 ## 👨‍💻 Developed By
 

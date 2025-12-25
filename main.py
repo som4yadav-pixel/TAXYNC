@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import uuid
 import json
 import io
@@ -43,6 +43,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def log_requests_and_errors(request: Request, call_next):
+    logging.info(f"Request: {request.method} {request.url}")
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logging.exception("Exception caught in middleware")
+        raise HTTPException(status_code=500, detail="Internal Server Error from middleware")
+
 # Basic logging setup
 logging.basicConfig(level=logging.INFO)
 
@@ -56,13 +66,13 @@ except:
 # Models
 class TaxCalculationRequest(BaseModel):
     income: float
-    section80C: float = 0
-    section80D: float = 0
-    hra: float = 0
-    home_loan_interest: float = 0
-    standard_deduction: float = 50000
-    edu_loan_interest: float = 0
-    donations: float = 0
+    section80C: float = 0.0
+    section80D: float = 0.0
+    hra: float = 0.0
+    home_loan_interest: float = 0.0
+    standard_deduction: float = 50000.0
+    edu_loan_interest: float = 0.0
+    donations: float = 0.0
 
 class ExportRequest(BaseModel):
     formData: dict
@@ -94,7 +104,6 @@ def calculate_old_regime_tax(income: float, total_deductions: float = 0) -> floa
     Calculates tax based on the old regime slabs for FY 2025-26.
     Deductions are passed as a single total amount.
     """
-    total_deductions = sum(deductions.values()) if deductions else 0
     taxable_income = max(0, income - total_deductions)
 
     # Section 87A rebate: If taxable income <= ₹5,00,000, tax liability is zero (before cess)
@@ -146,46 +155,37 @@ def calculate_new_regime_tax(income: float, standard_deduction: float = 50000) -
     tax_with_cess = tax * 1.04
     return float(round(tax_with_cess))
 
-def generate_tax_insights(result: Dict) -> Dict:
-    """Generate insights using Pandas for data analysis"""
-    df = pd.DataFrame([result])
-    
-    insights = {
-        "savingsPercentage": (result["savings"] / result["income"]) * 100 if result["income"] > 0 else 0,
-        "monthlyImpact": result["monthlySavings"],
-        "yearlyImpact": result["savings"],
-        "recommendation": result["recommendedRegime"],
-        "effectiveRate": result["effectiveRate"]
-    }
-    
-    return insights
 
 @app.get("/")
 async def root():
     return {"message": "Taxync API is running", "version": "1.0.0"}
 
 @app.post("/calculate-tax")
-async def calculate_tax(request: TaxCalculationRequest):
+async def calculate_tax(request: Request):
     """Calculate tax with comprehensive analysis for FY 2025-26"""
     try:
+        raw_data = await request.json()
+        logging.info(f"Raw /calculate-tax payload: {raw_data}")
+        tax_request = TaxCalculationRequest(**raw_data)
+
         # Apply Indian FY 2025-26 tax slabs
-        income = request.income
+        income = tax_request.income
         logging.info(
-            f"/calculate-tax payload: income={request.income}, section80C={request.section80C}, "
-            f"section80D={request.section80D}, hra={request.hra}, home_loan_interest={request.home_loan_interest}, "
-            f"standard_deduction={request.standard_deduction}, edu_loan_interest={request.edu_loan_interest}, donations={request.donations}"
+            f"/calculate-tax payload: income={tax_request.income}, section80C={tax_request.section80C}, "
+            f"section80D={tax_request.section80D}, hra={tax_request.hra}, home_loan_interest={tax_request.home_loan_interest}, "
+            f"standard_deduction={tax_request.standard_deduction}, edu_loan_interest={tax_request.edu_loan_interest}, donations={tax_request.donations}"
         )
         
         # Validate numeric inputs are finite
         for field_name, val in [
-            ("income", request.income),
-            ("section80C", request.section80C),
-            ("section80D", request.section80D),
-            ("hra", request.hra),
-            ("home_loan_interest", request.home_loan_interest),
-            ("standard_deduction", request.standard_deduction),
-            ("edu_loan_interest", request.edu_loan_interest),
-            ("donations", request.donations),
+            ("income", tax_request.income),
+            ("section80C", tax_request.section80C),
+            ("section80D", tax_request.section80D),
+            ("hra", tax_request.hra),
+            ("home_loan_interest", tax_request.home_loan_interest),
+            ("standard_deduction", tax_request.standard_deduction),
+            ("edu_loan_interest", tax_request.edu_loan_interest),
+            ("donations", tax_request.donations),
         ]:
             try:
                 if not math.isfinite(float(val)):
@@ -195,25 +195,25 @@ async def calculate_tax(request: TaxCalculationRequest):
         
         # Create a deductions dictionary for the old regime calculation
         deductions = {
-            "section80C": request.section80C,
-            "section80D": request.section80D,
-            "hra": request.hra,
-            "home_loan_interest": request.home_loan_interest,
-            "standard_deduction": request.standard_deduction,
-            "edu_loan_interest": request.edu_loan_interest,
-            "donations": request.donations
+            "section80C": tax_request.section80C,
+            "section80D": tax_request.section80D,
+            "hra": tax_request.hra,
+            "home_loan_interest": tax_request.home_loan_interest,
+            "standard_deduction": tax_request.standard_deduction,
+            "edu_loan_interest": tax_request.edu_loan_interest,
+            "donations": tax_request.donations
         }
 
         # Use the dedicated calculation functions for consistency and correctness
         total_deductions = sum(deductions.values())
         old_tax = calculate_old_regime_tax(income, total_deductions)
-        new_tax = calculate_new_regime_tax(income, request.standard_deduction)
+        new_tax = calculate_new_regime_tax(income, tax_request.standard_deduction)
 
         old_taxable_income = max(0, income - sum(deductions.values()))
 
         savings = old_tax - new_tax
         logging.info(
-            f"/calculate-tax computed: old_taxable_income={old_taxable_income}, new_taxable_income={max(0, income - request.standard_deduction)}, old_tax={old_tax}, new_tax={new_tax}, savings={savings}"
+            f"/calculate-tax computed: old_taxable_income={old_taxable_income}, new_taxable_income={max(0, income - tax_request.standard_deduction)}, old_tax={old_tax}, new_tax={new_tax}, savings={savings}"
         )
         
         # --- Smart Tax Advisor Logic ---
@@ -222,22 +222,22 @@ async def calculate_tax(request: TaxCalculationRequest):
         
 
         # 1. Section 80C Suggestion
-        if request.section80C < 150000:
-            remaining_80c = 150000 - request.section80C
+        if tax_request.section80C < 150000:
+            remaining_80c = 150000 - tax_request.section80C
             potential_saving = get_tax_saving_for_investment(remaining_80c, income, current_deductions)
             if potential_saving > 0:
                 suggestions.append(f"Invest ₹{remaining_80c:,.0f} more in Section 80C (e.g., ELSS, PPF) to save up to ₹{potential_saving:,.0f} in taxes.")
 
         # 2. Section 80D Suggestion (assuming non-senior citizen)
-        if request.section80D < 25000:
-            remaining_80d = 25000 - request.section80D
+        if tax_request.section80D < 25000:
+            remaining_80d = 25000 - tax_request.section80D
             potential_saving = get_tax_saving_for_investment(remaining_80d, income, current_deductions)
             if potential_saving > 0:
                 suggestions.append(f"Increase your health insurance premium by ₹{remaining_80d:,.0f} (Section 80D) to save up to ₹{potential_saving:,.0f} in taxes.")
 
         # 3. Home Loan Interest Suggestion
-        if request.home_loan_interest < 200000:
-            remaining_interest = 200000 - request.home_loan_interest
+        if tax_request.home_loan_interest < 200000:
+            remaining_interest = 200000 - tax_request.home_loan_interest
             potential_saving = get_tax_saving_for_investment(remaining_interest, income, current_deductions)
             if potential_saving > 0:
                 suggestions.append(f"Claiming up to ₹{remaining_interest:,.0f} more in Home Loan Interest (Section 24b) could save you ₹{potential_saving:,.0f}.")
@@ -275,7 +275,7 @@ async def calculate_tax(request: TaxCalculationRequest):
         if redis_client:
             try:
                 # Use a hash of the request as the key
-                request_dict = request.dict()
+                request_dict = tax_request.dict()
                 # Sort keys to ensure consistent hashing
                 sorted_request_str = json.dumps(request_dict, sort_keys=True)
                 cache_key = f"tax_calc:{hashlib.sha256(sorted_request_str.encode()).hexdigest()}"
@@ -381,6 +381,7 @@ async def export_pdf(request: ExportRequest):
             headers={"Content-Disposition": f"attachment; filename=Tax_Report_{datetime.now().year}.pdf"}
         )
     except Exception as e:
+        logging.exception("Unhandled error in /export/pdf")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/export/excel")
@@ -508,6 +509,7 @@ async def export_excel(request: ExportRequest):
             },
         )
     except Exception as e:
+        logging.exception("Unhandled error in /export/excel")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/share")
